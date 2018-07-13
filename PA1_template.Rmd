@@ -1,25 +1,225 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+output: html_document
+keep_md: true
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+library(lattice)
+```
 
-## Loading and preprocessing the data
+# Steps activity analysis
 
+This study analysed personal movement collected using activity monitoring devices such as a Fitbit, Nike Fuelband, or Jawbone Up. These type of devices are part of the “quantified self” movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. 
 
+Personal activity data was collected at 5 minute intervals through out the day using one activity monitoring device. The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012.
 
-## What is mean total number of steps taken per day?
+The variables included in this dataset are:
 
+- steps: Number of steps taking in a 5-minute interval (missing values are coded as NA)
+- date: The date on which the measurement was taken in YYYY-MM-DD format
+- interval: Identifier for the 5-minute interval in which measurement was taken
 
+## Data download and unzip 
+If file not present, download from url
+```{r download, echo=TRUE}
+url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+fileName <- "activity.zip"
+if(!file.exists(fileName)){
+  cat("Downloading data zip file...\n")
+  download.file(url,fileName, mode = "wb") # "wb" mode - binary files 
+}
+```
 
-## What is the average daily activity pattern?
+## Data download and unzip 
+If directory does not exist, unzip the downloaded file.
+```{r unzip, echo=TRUE}
+file <- "activity.csv"
+if(!file.exists(file)){
+  cat("Unzipping data file...\n")
+  unzip(fileName, files = NULL, exdir=".")
+}
+```
 
+## Read the data
+
+```{r read, echo=TRUE}
+df <- read.csv(file, header=TRUE, stringsAsFactors = FALSE, na.strings = "NA")
+```
+
+## Inspect the data
+```{r inspect1, echo=TRUE}
+str(df)
+head(df)
+summary(df)
+```
+
+## Process the data
+Convert date formats
+```{r date, echo=TRUE}
+df$date <- ymd(df$date)
+str(df)
+summary(df)
+```
+
+## Mean total number of steps per day
+
+### 1. Calculate the total number of steps taken per day
+The total number of steps taken per day was calculated by summing the observations in each day (excluding NA values).
+```{r dailysteps, echo=TRUE}
+metrics <- df %>%
+  group_by(date) %>%
+  summarize(no.obs = n(), daily.steps = sum(steps, na.rm = TRUE)) %>%      
+  print
+```
+
+### 2. Distribution of total steps per day
+Figure 1. Histogram distribution of the total steps per day.
+```{r hist, echo=TRUE}
+hist(metrics$daily.steps, xlab="Number of steps per day", main="Daily steps")
+```
+
+### 3. Mean and median of the total number of steps per day
+
+The number of steps each day had a mean of 
+```{r mean, echo=TRUE}
+mean(metrics$daily.steps, na.rm=TRUE)
+```
+
+and a median of 
+```{r median, echo=TRUE}
+median(metrics$daily.steps, na.rm=TRUE)
+```
+
+## Average daily activity pattern
+
+### 1. Time series
+
+Figure 2. Time series plot (i.e. type="l") of all observations (5-minute intervals), with the average number of steps averaged across all days overlaid on the plot.
+```{r timeseries, echo=TRUE}
+dailypattern <- df %>%
+  group_by(interval) %>%
+  summarize(no.days = n(), interval.steps = mean(steps, na.rm = TRUE)) 
+str(dailypattern)
+plot(dailypattern$interval, dailypattern$interval.steps, 
+     type="l", xlab="Interval", ylab="Average steps", 
+     main="Daily pattern", lwd=2)
+```
+
+### 2. Peak time interval
+
+The daily pattern peaks with a maximum average number of steps of 
+```{r dailypeak, echo=TRUE}
+max(dailypattern$interval.steps, na.rm=TRUE) 
+```
+This peak occurs in the 5-minute interval of
+```{r dailypeaktime, echo=TRUE}
+dailypattern$interval[which(dailypattern$interval.steps==
+                              max(dailypattern$interval.steps, na.rm=TRUE))]
+```
+minutes into the day.
 
 
 ## Imputing missing values
 
+Note that there are a number of days/intervals where there are missing values (coded as NA). The presence of missing days may introduce bias into some calculations or summaries of the data.
+
+### 1. Missing values
+
+The total number of missing values in the dataset (i.e. the total number of rows with NAs) is:
+```{r isna, echo=TRUE}
+sum(is.na(df$steps))
+```
+
+### 2. Imputing missing values
+
+Missing values are imputed using the mean number of steps in that 5 minute interval averaged over all days.
+```{r NApattern, echo=TRUE}
+napattern <- df %>%
+  filter(is.na(steps)) %>%
+  group_by(interval) %>%
+  summarize(no.NA.days = n()) 
+plot(napattern$interval, napattern$no.NA.days, 
+     type="l", xlab="Interval", ylab="Number days with NA", 
+     main="Daily NA pattern", lwd=2)
+```
 
 
-## Are there differences in activity patterns between weekdays and weekends?
+### 3. Data corrected for missing values 
+Create a new dataset that is equal to the original dataset but with the missing data filled in.
+```{r impute, echo=TRUE}
+naind <- which(is.na(df$steps))
+head(df[naind,])
+dfc <- df
+for (i in naind) {
+  di <- which(dailypattern$interval == df$interval[i])
+  dfc$steps[i] <- dailypattern$interval.steps[di]
+}
+```
+
+
+### 4. Histogram
+
+Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day. Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?
+
+Figure 3. Histogram distribution of the total steps per day of corrected dataset.
+```{r histc, echo=TRUE}
+metricsc <- dfc %>%
+  group_by(date) %>%
+  summarize(no.obs = n(), daily.steps = sum(steps, na.rm = TRUE)) 
+hist(metricsc$daily.steps, xlab="Number of steps per day", main="Daily steps (NA values replaced)")
+```
+
+Mean and median of the total number of steps per day of corrected dataset
+
+The number of steps each day had a mean of 
+```{r meanc, echo=TRUE}
+mean(metricsc$daily.steps, na.rm=TRUE)
+```
+
+and a median of 
+```{r medianc, echo=TRUE}
+median(metricsc$daily.steps, na.rm=TRUE)
+```
+This shows that the replacement of NA values with imputed values has increased the summed number of steps over each day, as expected.
+
+
+## Differences in activity patterns between weekdays and weekends
+
+For this part the weekdays() function may be of some help here. Use the dataset with the filled-in missing values for this part.
+
+Next, a new factor variable was added to the dataset with two levels – “weekday” and “weekend” to indicate whether a given date is a weekday or weekend day.
+```{r weekdays, echo=TRUE}
+dfc <- tbl_df(dfc)
+weekdays1 <- c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')
+dfc$wDay <- factor((weekdays(dfc$date) %in% weekdays1), 
+         levels=c(FALSE, TRUE), labels=c('weekend', 'weekday')) 
+head(dfc)
+```
+
+Next, a panel plot containing a time series plot (i.e. type="l") was made of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). 
+
+Figure 4. Daily activity pattern averaged across all weekdays and weekend days.
+```{r pattern, echo=TRUE}
+dailypattern_wd <- dfc %>%
+  filter(wDay == "weekday") %>%
+  group_by(interval) %>%
+  summarize(no.days = n(), interval.steps = mean(steps, na.rm = TRUE)) 
+dailypattern_we <- dfc %>%
+  filter(wDay == "weekend") %>%
+  group_by(interval) %>%
+  summarize(no.days = n(), interval.steps = mean(steps, na.rm = TRUE)) 
+
+par(mfrow=c(2,1))
+plot(dailypattern_wd$interval, dailypattern_wd$interval.steps, 
+     type="l", xlab="Interval", ylab="Average steps", 
+     lwd=2, main="Weekdays")
+plot(dailypattern_we$interval, dailypattern_we$interval.steps, 
+     type="l", xlab="Interval", ylab="Average steps", 
+     lwd=2, main="Weekends")
+```
+
